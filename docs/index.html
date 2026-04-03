@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UK Crime Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 1rem 1.5rem;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      display: flex;
+      align-items: baseline;
+      gap: 0.75rem;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 600; letter-spacing: -0.01em; }
+    header p { font-size: 0.8rem; color: #64748b; }
+
+    .controls {
+      padding: 0.875rem 1.5rem;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+    }
+    .controls form {
+      display: flex;
+      gap: 0.625rem;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+    .field { display: flex; flex-direction: column; gap: 0.3rem; }
+    label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #64748b;
+      font-weight: 500;
+    }
+    input, select {
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: #e2e8f0;
+      padding: 0.45rem 0.7rem;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus { border-color: #3b82f6; }
+    input[type="text"] { width: 140px; }
+    select { min-width: 130px; cursor: pointer; }
+    select option { background: #1e293b; }
+
+    .btn {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 0.45rem 1.1rem;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .btn:hover:not(:disabled) { background: #2563eb; }
+    .btn:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+
+    #status {
+      padding: 0.4rem 1.5rem;
+      background: #0f172a;
+      font-size: 0.775rem;
+      color: #64748b;
+      min-height: 1.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .spinner {
+      width: 12px; height: 12px;
+      border: 2px solid #334155;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #map { flex: 1; min-height: 420px; }
+
+    .results {
+      background: #0f172a;
+      border-top: 1px solid #1e293b;
+    }
+
+    .summary {
+      padding: 0.875rem 1.5rem;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .summary-count { font-size: 0.9rem; font-weight: 500; }
+    .summary-meta { font-size: 0.775rem; color: #64748b; }
+
+    .breakdown {
+      padding: 0.875rem 1.5rem;
+      background: #0f172a;
+      border-bottom: 1px solid #1e293b;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .breakdown-item {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      font-size: 0.775rem;
+      color: #94a3b8;
+    }
+    .breakdown-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .breakdown-count { color: #e2e8f0; font-weight: 500; }
+
+    .table-wrap { overflow-x: auto; max-height: 320px; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    thead th {
+      position: sticky; top: 0;
+      background: #1e293b;
+      text-align: left;
+      padding: 0.5rem 1rem;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      font-weight: 500;
+      border-bottom: 1px solid #334155;
+    }
+    tbody tr { border-bottom: 1px solid #0f172a; }
+    tbody tr:hover td { background: #1e293b; }
+    tbody td { padding: 0.45rem 1rem; color: #cbd5e1; }
+    tbody td:first-child { color: #64748b; white-space: nowrap; }
+    .cat-pill {
+      display: inline-block;
+      padding: 0.1rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 500;
+    }
+    .truncated-note {
+      padding: 0.5rem 1rem;
+      font-size: 0.75rem;
+      color: #64748b;
+      text-align: center;
+      border-top: 1px solid #1e293b;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>UK Crime Map</h1>
+  <p>data.police.uk</p>
+</header>
+
+<div class="controls">
+  <form id="form">
+    <div class="field">
+      <label>Postcode</label>
+      <input type="text" id="postcode" placeholder="e.g. SE1 7PB" value="SE1 7PB" />
+    </div>
+    <div class="field">
+      <label>Radius</label>
+      <select id="radius">
+        <option value="0.5">0.5 km</option>
+        <option value="1" selected>1 km</option>
+        <option value="2">2 km</option>
+        <option value="5">5 km</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Crime type</label>
+      <select id="category">
+        <option value="">Loading…</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Period</label>
+      <select id="months">
+        <option value="1">1 month</option>
+        <option value="3" selected>3 months</option>
+        <option value="6">6 months</option>
+        <option value="12">12 months</option>
+      </select>
+    </div>
+    <button class="btn" type="submit" id="search-btn">Search</button>
+  </form>
+</div>
+
+<div id="status"></div>
+
+<div id="map"></div>
+
+<div class="results" id="results" style="display:none">
+  <div class="summary">
+    <span class="summary-count" id="summary-count"></span>
+    <span class="summary-meta" id="summary-meta"></span>
+  </div>
+  <div class="breakdown" id="breakdown"></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Month</th>
+          <th>Category</th>
+          <th>Location</th>
+          <th>Outcome</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div class="truncated-note" id="truncated-note" style="display:none"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const API = 'https://data.police.uk/api';
+const PC  = 'https://api.postcodes.io';
+const MAX_ROWS = 500;
+
+// ── Map ──────────────────────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: true }).setView([51.505, -0.09], 12);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+  maxZoom: 19,
+}).addTo(map);
+
+const layer = L.layerGroup().addTo(map);
+
+// ── Colours ──────────────────────────────────────────────────────────────────
+const PALETTE = [
+  '#ef4444','#f97316','#eab308','#22c55e','#14b8a6',
+  '#3b82f6','#8b5cf6','#ec4899','#06b6d4','#84cc16',
+  '#f59e0b','#64748b','#dc2626','#6366f1','#10b981',
+  '#a855f7','#e11d48','#0ea5e9',
+];
+const colourMap = {};
+function colourFor(cat) {
+  if (!colourMap[cat]) {
+    const used = Object.values(colourMap).length;
+    colourMap[cat] = PALETTE[used % PALETTE.length];
+  }
+  return colourMap[cat];
+}
+
+// Ensure all-crime has a stable colour
+colourFor('all-crime');
+
+function dotIcon(colour) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:9px;height:9px;border-radius:50%;background:${colour};border:1.5px solid rgba(255,255,255,0.4);"></div>`,
+    iconSize: [9, 9],
+    iconAnchor: [4, 4],
+  });
+}
+
+// ── Utilities ────────────────────────────────────────────────────────────────
+function circlePolygon(lat, lng, km, n = 32) {
+  const R = 6371, pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = (2 * Math.PI * i) / n;
+    const dLat = (km / R) * Math.cos(a) * (180 / Math.PI);
+    const dLng = (km / R) * Math.sin(a) / Math.cos(lat * Math.PI / 180) * (180 / Math.PI);
+    pts.push([lat + dLat, lng + dLng]);
+  }
+  return pts;
+}
+
+function encodePoly(poly) {
+  return poly.map(([a, b]) => `${a},${b}`).join(':');
+}
+
+function recentMonths(n) {
+  const months = [], now = new Date();
+  now.setMonth(now.getMonth() - 2); // API lags ~2 months
+  for (let i = 0; i < n; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+  return months;
+}
+
+function fmtCat(slug) {
+  return slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function setStatus(msg, spinning = false) {
+  const el = document.getElementById('status');
+  if (!msg) { el.innerHTML = ''; return; }
+  el.innerHTML = spinning
+    ? `<div class="spinner"></div><span>${msg}</span>`
+    : `<span>${msg}</span>`;
+}
+
+// ── API calls ─────────────────────────────────────────────────────────────────
+async function loadCategories() {
+  try {
+    const r = await fetch(`${API}/crime-categories`);
+    const cats = await r.json();
+    const sel = document.getElementById('category');
+    sel.innerHTML = '';
+    // all-crime first, then alphabetical
+    const sorted = [
+      ...cats.filter(c => c.url === 'all-crime'),
+      ...cats.filter(c => c.url !== 'all-crime').sort((a, b) => a.name.localeCompare(b.name)),
+    ];
+    sorted.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.url;
+      o.textContent = c.name;
+      if (c.url === 'possession-of-weapons') o.selected = true;
+      sel.appendChild(o);
+    });
+  } catch {
+    document.getElementById('category').innerHTML = '<option value="all-crime">All crime</option>';
+  }
+}
+
+async function geocode(postcode) {
+  const slug = postcode.replace(/\s+/g, '').toUpperCase();
+  const r = await fetch(`${PC}/postcodes/${slug}`);
+  if (!r.ok) throw new Error(`Postcode "${postcode}" not found`);
+  const { result } = await r.json();
+  return [result.latitude, result.longitude];
+}
+
+async function fetchMonth(category, poly, date) {
+  const encoded = encodePoly(poly);
+  const path = `${API}/crimes-street/${category}`;
+  const usePost = `${path}?poly=${encoded}&date=${date}`.length > 1800;
+
+  let r;
+  if (usePost) {
+    const body = new URLSearchParams({ poly: encoded });
+    if (date) body.set('date', date);
+    r = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+  } else {
+    const p = new URLSearchParams({ poly: encoded });
+    if (date) p.set('date', date);
+    r = await fetch(`${path}?${p}`);
+  }
+
+  if (r.status === 503 || r.status === 404) return [];
+  if (!r.ok) throw new Error(`API returned ${r.status}`);
+  return r.json();
+}
+
+// ── Search ────────────────────────────────────────────────────────────────────
+async function search(e) {
+  e.preventDefault();
+  const postcode = document.getElementById('postcode').value.trim();
+  const radius   = parseFloat(document.getElementById('radius').value);
+  const category = document.getElementById('category').value;
+  const months   = parseInt(document.getElementById('months').value);
+
+  if (!postcode) { setStatus('Enter a postcode to search.'); return; }
+
+  const btn = document.getElementById('search-btn');
+  btn.disabled = true;
+  document.getElementById('results').style.display = 'none';
+
+  try {
+    setStatus('Geocoding postcode…', true);
+    const [lat, lng] = await geocode(postcode);
+    const poly = circlePolygon(lat, lng, radius);
+    const monthList = recentMonths(months);
+
+    const seen = new Set();
+    const all = [];
+
+    for (let i = 0; i < monthList.length; i++) {
+      const m = monthList[i];
+      setStatus(`Fetching ${m} (${i + 1}/${monthList.length})…`, true);
+      try {
+        const crimes = await fetchMonth(category, poly, m);
+        for (const c of crimes) {
+          const key = c.persistent_id || `${c.id}-${m}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            all.push(c);
+          }
+        }
+      } catch (err) {
+        console.warn(`Skipped ${m}:`, err.message);
+      }
+    }
+
+    setStatus(`${all.length} crimes found.`);
+    renderMap(all, lat, lng, radius);
+    renderResults(all, monthList);
+
+  } catch (err) {
+    setStatus(`Error: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderMap(crimes, lat, lng, radius) {
+  layer.clearLayers();
+  map.setView([lat, lng], radius >= 5 ? 12 : radius >= 2 ? 13 : 14);
+
+  L.circle([lat, lng], {
+    radius: radius * 1000,
+    color: '#3b82f6',
+    fillColor: '#1d4ed8',
+    fillOpacity: 0.06,
+    weight: 1.5,
+  }).addTo(layer);
+
+  for (const c of crimes) {
+    const clat = parseFloat(c.location?.latitude);
+    const clng = parseFloat(c.location?.longitude);
+    if (!clat || !clng) continue;
+    const colour = colourFor(c.category);
+    L.marker([clat, clng], { icon: dotIcon(colour) })
+      .bindPopup(
+        `<b>${fmtCat(c.category)}</b><br>` +
+        `${c.location?.street?.name || '—'}<br>` +
+        `${c.month}<br>` +
+        `<span style="color:#9ca3af">${c.outcome_status?.category || 'No outcome recorded'}</span>`,
+        { maxWidth: 220 }
+      )
+      .addTo(layer);
+  }
+}
+
+function renderResults(crimes, monthList) {
+  // Summary
+  document.getElementById('summary-count').textContent =
+    `${crimes.length} crime${crimes.length !== 1 ? 's' : ''} found`;
+  const earliest = monthList[monthList.length - 1];
+  const latest   = monthList[0];
+  document.getElementById('summary-meta').textContent =
+    earliest === latest ? earliest : `${earliest} – ${latest}`;
+
+  // Category breakdown
+  const counts = {};
+  for (const c of crimes) counts[c.category] = (counts[c.category] || 0) + 1;
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+
+  document.getElementById('breakdown').innerHTML = sorted.map(([cat, n]) =>
+    `<span class="breakdown-item">
+      <span class="breakdown-dot" style="background:${colourFor(cat)}"></span>
+      ${fmtCat(cat)} <span class="breakdown-count">${n}</span>
+    </span>`
+  ).join('');
+
+  // Table (most recent first)
+  const rows = [...crimes].sort((a, b) => b.month.localeCompare(a.month));
+  const display = rows.slice(0, MAX_ROWS);
+
+  document.getElementById('tbody').innerHTML = display.map(c => {
+    const colour = colourFor(c.category);
+    return `<tr>
+      <td>${c.month}</td>
+      <td><span class="cat-pill" style="background:${colour}22;color:${colour}">${fmtCat(c.category)}</span></td>
+      <td>${c.location?.street?.name || '—'}</td>
+      <td>${c.outcome_status?.category || '—'}</td>
+    </tr>`;
+  }).join('');
+
+  const note = document.getElementById('truncated-note');
+  if (rows.length > MAX_ROWS) {
+    note.textContent = `Showing ${MAX_ROWS} of ${rows.length} results`;
+    note.style.display = 'block';
+  } else {
+    note.style.display = 'none';
+  }
+
+  document.getElementById('results').style.display = 'block';
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.getElementById('form').addEventListener('submit', search);
+loadCategories();
+</script>
+</body>
+</html>
