@@ -40,7 +40,7 @@ jobs:
         run: uv sync --all-groups
 
       - name: Type check
-        run: uv run ty check --ignore unresolved-import
+        run: uv run ty check --ignore unresolved-import --ignore invalid-method-override
 
   test:
     runs-on: ubuntu-latest

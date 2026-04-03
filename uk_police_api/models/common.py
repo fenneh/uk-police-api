@@ -24,7 +24,7 @@ class Location(BaseModel):
     def coerce_float(cls, v: object) -> float | None:
         if v is None or v == "":
             return None
-        return float(v)  # type: ignore[arg-type]
+        return float(str(v))
 
 
 class Coordinates(BaseModel):
@@ -36,7 +36,7 @@ class Coordinates(BaseModel):
     @field_validator("latitude", "longitude", mode="before")
     @classmethod
     def coerce_float(cls, v: object) -> float:
-        return float(v)  # type: ignore[arg-type]
+        return float(str(v))
 
 
 class EngagementMethod(BaseModel):

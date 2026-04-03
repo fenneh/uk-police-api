@@ -1,6 +1,5 @@
 """Tests for Pydantic model validation, coercion, and edge cases."""
 
-
 from uk_police_api.models.availability import AvailabilityDate
 from uk_police_api.models.common import Coordinates, Location
 from uk_police_api.models.crime import (
