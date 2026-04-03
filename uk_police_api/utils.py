@@ -78,8 +78,7 @@ def circle_polygon(lat: float, lng: float, radius_km: float, num_points: int = 3
     for i in range(num_points):
         bearing = 2 * math.pi * i / num_points
         lat2 = math.asin(
-            math.sin(lat_r) * math.cos(d)
-            + math.cos(lat_r) * math.sin(d) * math.cos(bearing)
+            math.sin(lat_r) * math.cos(d) + math.cos(lat_r) * math.sin(d) * math.cos(bearing)
         )
         lng2 = lng_r + math.atan2(
             math.sin(bearing) * math.sin(d) * math.cos(lat_r),

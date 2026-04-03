@@ -8,6 +8,7 @@ import logging
 import random
 import time
 from functools import cached_property
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -28,11 +29,15 @@ _RETRYABLE = {429, 500, 502, 503, 504}
 
 
 class Cache:
-    """Simple in-memory TTL cache for GET responses."""
+    """TTL cache for GET responses. Supports in-memory and optional disk persistence."""
 
-    def __init__(self, ttl: int) -> None:
+    def __init__(self, ttl: int, cache_dir: Path | None = None) -> None:
         self._ttl = ttl
+        self._cache_dir = cache_dir
         self._store: dict[str, tuple[float, Any]] = {}
+
+        if cache_dir:
+            cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _key(self, path: str, params: dict[str, str] | None) -> str:
         payload = json.dumps({"path": path, "params": params}, sort_keys=True)
@@ -40,22 +45,44 @@ class Cache:
 
     def get(self, path: str, params: dict[str, str] | None = None) -> Any | None:
         key = self._key(path, params)
-        entry = self._store.get(key)
-        if entry is None:
-            return None
-        expires_at, data = entry
-        if time.time() < expires_at:
-            logger.debug("Cache hit: %s", path)
-            return data
-        del self._store[key]
+        now = time.time()
+
+        if key in self._store:
+            expires_at, data = self._store[key]
+            if now < expires_at:
+                logger.debug("Cache hit (memory): %s", path)
+                return data
+            del self._store[key]
+
+        if self._cache_dir:
+            cache_file = self._cache_dir / f"{key}.json"
+            if cache_file.exists():
+                try:
+                    cached = json.loads(cache_file.read_text())
+                    if now < cached["expires_at"]:
+                        self._store[key] = (cached["expires_at"], cached["data"])
+                        logger.debug("Cache hit (disk): %s", path)
+                        return cached["data"]
+                    cache_file.unlink()
+                except (json.JSONDecodeError, KeyError):
+                    cache_file.unlink(missing_ok=True)
+
         return None
 
     def set(self, path: str, params: dict[str, str] | None, data: Any) -> None:
         key = self._key(path, params)
-        self._store[key] = (time.time() + self._ttl, data)
+        expires_at = time.time() + self._ttl
+        self._store[key] = (expires_at, data)
+
+        if self._cache_dir:
+            cache_file = self._cache_dir / f"{key}.json"
+            cache_file.write_text(json.dumps({"expires_at": expires_at, "data": data}))
 
     def clear(self) -> None:
         self._store.clear()
+        if self._cache_dir:
+            for f in self._cache_dir.glob("*.json"):
+                f.unlink()
 
 
 def _backoff(attempt: int) -> float:
@@ -83,10 +110,11 @@ class PoliceAPI:
         timeout: float = 30.0,
         max_retries: int = 4,
         cache_ttl: int | None = 300,
+        cache_dir: Path | None = None,
     ) -> None:
         self._timeout = timeout
         self._max_retries = max_retries
-        self._cache = Cache(cache_ttl) if cache_ttl is not None else None
+        self._cache = Cache(cache_ttl, cache_dir=cache_dir) if cache_ttl is not None else None
         self._http = httpx.Client(
             base_url=BASE_URL,
             timeout=timeout,
@@ -166,7 +194,11 @@ class PoliceAPI:
             wait = float(retry_after) if retry_after else _backoff(attempt)
             logger.warning(
                 "HTTP %d on %s, retry %d/%d in %.2fs",
-                response.status_code, url, attempt + 1, self._max_retries, wait,
+                response.status_code,
+                url,
+                attempt + 1,
+                self._max_retries,
+                wait,
             )
             time.sleep(wait)
 
@@ -200,10 +232,11 @@ class AsyncPoliceAPI:
         timeout: float = 30.0,
         max_retries: int = 4,
         cache_ttl: int | None = 300,
+        cache_dir: Path | None = None,
     ) -> None:
         self._timeout = timeout
         self._max_retries = max_retries
-        self._cache = Cache(cache_ttl) if cache_ttl is not None else None
+        self._cache = Cache(cache_ttl, cache_dir=cache_dir) if cache_ttl is not None else None
         self._http = httpx.AsyncClient(
             base_url=BASE_URL,
             timeout=timeout,
@@ -285,7 +318,11 @@ class AsyncPoliceAPI:
             wait = float(retry_after) if retry_after else _backoff(attempt)
             logger.warning(
                 "HTTP %d on %s, retry %d/%d in %.2fs",
-                response.status_code, url, attempt + 1, self._max_retries, wait,
+                response.status_code,
+                url,
+                attempt + 1,
+                self._max_retries,
+                wait,
             )
             await asyncio.sleep(wait)
 

@@ -34,6 +34,7 @@ def _resolve_poly(
         raise ValueError("Specify postcode or poly, not both")
     if postcode is not None:
         from ..postcodes import PostcodesIO
+
         with PostcodesIO() as geo:
             loc = geo.lookup(postcode)
         return circle_polygon(loc.latitude, loc.longitude, radius_km)
@@ -50,6 +51,7 @@ async def _async_resolve_poly(
         raise ValueError("Specify postcode or poly, not both")
     if postcode is not None:
         from ..postcodes import AsyncPostcodesIO
+
         async with AsyncPostcodesIO() as geo:
             loc = await geo.lookup(postcode)
         return circle_polygon(loc.latitude, loc.longitude, radius_km)

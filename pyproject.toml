@@ -46,6 +46,14 @@ exclude = ["tests/"]
 asyncio_mode = "auto"
 markers = ["integration: tests that hit the real data.police.uk API"]
 
+[tool.coverage.run]
+source = ["uk_police_api"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"

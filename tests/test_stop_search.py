@@ -70,9 +70,7 @@ class TestStopSearchAtLocation:
 class TestStopSearchByForce:
     def test_by_force(self):
         with respx.mock(base_url=BASE, assert_all_called=False) as router:
-            route = router.get("/stops-force").mock(
-                return_value=Response(200, json=[STOP_FIXTURE])
-            )
+            route = router.get("/stops-force").mock(return_value=Response(200, json=[STOP_FIXTURE]))
             with PoliceAPI(cache_ttl=None) as api:
                 stops = api.stop_search.by_force("metropolitan", date="2024-10")
         assert route.calls[0].request.url.params["force"] == "metropolitan"

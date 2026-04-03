@@ -43,9 +43,7 @@ class TestForcesList:
 class TestForcesGet:
     def test_get(self):
         with respx.mock(base_url=BASE, assert_all_called=False) as router:
-            router.get("/forces/metropolitan").mock(
-                return_value=Response(200, json=FORCE_FIXTURE)
-            )
+            router.get("/forces/metropolitan").mock(return_value=Response(200, json=FORCE_FIXTURE))
             with PoliceAPI(cache_ttl=None) as api:
                 force = api.forces.get("metropolitan")
         assert isinstance(force, Force)

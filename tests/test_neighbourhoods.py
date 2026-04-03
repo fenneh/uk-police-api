@@ -43,9 +43,7 @@ class TestNeighbourhoodsList:
 class TestNeighbourhoodsGet:
     def test_get(self):
         with respx.mock(base_url=BASE, assert_all_called=False) as router:
-            router.get("/surrey/00BK").mock(
-                return_value=Response(200, json=NEIGHBOURHOOD_FIXTURE)
-            )
+            router.get("/surrey/00BK").mock(return_value=Response(200, json=NEIGHBOURHOOD_FIXTURE))
             with PoliceAPI(cache_ttl=None) as api:
                 n = api.neighbourhoods.get("surrey", "00BK")
         assert isinstance(n, Neighbourhood)
@@ -102,9 +100,7 @@ class TestNeighbourhoodsPriorities:
             "action_date": "2024-02-01T00:00:00",
         }
         with respx.mock(base_url=BASE, assert_all_called=False) as router:
-            router.get("/surrey/00BK/priorities").mock(
-                return_value=Response(200, json=[priority])
-            )
+            router.get("/surrey/00BK/priorities").mock(return_value=Response(200, json=[priority]))
             with PoliceAPI(cache_ttl=None) as api:
                 priorities = api.neighbourhoods.priorities("surrey", "00BK")
         assert len(priorities) == 1
@@ -116,9 +112,7 @@ class TestNeighbourhoodsLocate:
     def test_locate(self):
         with respx.mock(base_url=BASE, assert_all_called=False) as router:
             router.get("/locate-neighbourhood").mock(
-                return_value=Response(
-                    200, json={"force": "surrey", "neighbourhood": "00BK"}
-                )
+                return_value=Response(200, json={"force": "surrey", "neighbourhood": "00BK"})
             )
             with PoliceAPI(cache_ttl=None) as api:
                 result = api.neighbourhoods.locate(lat=51.25, lng=-0.56)
