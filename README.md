@@ -284,6 +284,11 @@ The UK Police Data API is a free, open public API — no authentication or API k
 - Data updated monthly, typically 2–3 months behind current date
 - Docs: [data.police.uk/docs](https://data.police.uk/docs/)
 
+
+## Related
+
+[**london-crime-data**](https://github.com/fenneh/london-crime-data) — MPS crime datasets as Parquet files, refreshed monthly. Covers recorded crime at borough, ward, and LSOA level (back to 2008), stop and search, knife crime, VAWG, homicide, and more. Better suited than this client for bulk analysis, historical trends, or anything MPS-specific.
+
 ## License
 
 MIT
