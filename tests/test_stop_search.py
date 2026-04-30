@@ -3,7 +3,7 @@
 import respx
 from httpx import Response
 
-from uk_police_api import PoliceAPI
+from uk_police_api import AsyncPoliceAPI, PoliceAPI
 from uk_police_api.models import StopSearch
 
 BASE = "https://data.police.uk/api"
@@ -67,6 +67,18 @@ class TestStopSearchAtLocation:
         assert len(stops) == 1
 
 
+class TestStopSearchNoLocation:
+    def test_no_location(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/stops-no-location").mock(
+                return_value=Response(200, json=[STOP_FIXTURE])
+            )
+            with PoliceAPI(cache_ttl=None) as api:
+                stops = api.stop_search.no_location("metropolitan", date="2024-10")
+        assert route.calls[0].request.url.params["force"] == "metropolitan"
+        assert len(stops) == 1
+
+
 class TestStopSearchByForce:
     def test_by_force(self):
         with respx.mock(base_url=BASE, assert_all_called=False) as router:
@@ -74,4 +86,50 @@ class TestStopSearchByForce:
             with PoliceAPI(cache_ttl=None) as api:
                 stops = api.stop_search.by_force("metropolitan", date="2024-10")
         assert route.calls[0].request.url.params["force"] == "metropolitan"
+        assert len(stops) == 1
+
+
+class TestAsyncStopSearch:
+    async def test_street_by_point(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            router.get("/stops-street").mock(return_value=Response(200, json=[STOP_FIXTURE]))
+            async with AsyncPoliceAPI(cache_ttl=None) as api:
+                stops = await api.stop_search.street(lat=51.5074, lng=-0.1278)
+        assert len(stops) == 1
+        assert isinstance(stops[0], StopSearch)
+
+    async def test_at_location(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/stops-at-location").mock(
+                return_value=Response(200, json=[STOP_FIXTURE])
+            )
+            async with AsyncPoliceAPI(cache_ttl=None) as api:
+                stops = await api.stop_search.at_location(location_id=12345)
+        assert route.calls[0].request.url.params["location_id"] == "12345"
+        assert len(stops) == 1
+
+    async def test_no_location(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/stops-no-location").mock(
+                return_value=Response(200, json=[STOP_FIXTURE])
+            )
+            async with AsyncPoliceAPI(cache_ttl=None) as api:
+                stops = await api.stop_search.no_location("metropolitan", date="2024-10")
+        assert route.calls[0].request.url.params["force"] == "metropolitan"
+        assert len(stops) == 1
+
+    async def test_by_force(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/stops-force").mock(return_value=Response(200, json=[STOP_FIXTURE]))
+            async with AsyncPoliceAPI(cache_ttl=None) as api:
+                stops = await api.stop_search.by_force("metropolitan", date="2024-10")
+        assert route.calls[0].request.url.params["force"] == "metropolitan"
+        assert len(stops) == 1
+
+    async def test_street_by_polygon(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            router.get("/stops-street").mock(return_value=Response(200, json=[STOP_FIXTURE]))
+            poly = [(51.515, -0.141), (51.515, -0.131), (51.507, -0.131), (51.507, -0.141)]
+            async with AsyncPoliceAPI(cache_ttl=None) as api:
+                stops = await api.stop_search.street(poly=poly)
         assert len(stops) == 1
