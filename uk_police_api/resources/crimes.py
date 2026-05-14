@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 
 from ..models.crime import (
@@ -409,11 +410,10 @@ class AsyncCrimesResource(CrimesResource):
     ) -> list[Crime]:
         """Street-level crimes across multiple months (async version)."""
         poly = await _async_resolve_poly(postcode, radius_km, poly)
-        seen: set[str] = set()
-        results: list[Crime] = []
-        for month in recent_months(months):
+
+        async def _fetch(month: str) -> list[Crime]:
             try:
-                crimes = await self.street(
+                return await self.street(
                     category,
                     lat=lat,
                     lng=lng,
@@ -422,8 +422,13 @@ class AsyncCrimesResource(CrimesResource):
                     date=month,
                 )
             except Exception:
-                continue
-            for c in crimes:
+                return []
+
+        batches = await asyncio.gather(*[_fetch(m) for m in recent_months(months)])
+        seen: set[str] = set()
+        results: list[Crime] = []
+        for batch in batches:
+            for c in batch:
                 if c.persistent_id not in seen:
                     seen.add(c.persistent_id)
                     results.append(c)

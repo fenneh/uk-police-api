@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -280,8 +281,6 @@ class AsyncPoliceAPI:
         params: dict[str, str] | None = None,
         data: dict[str, str] | None = None,
     ) -> Any:
-        import asyncio
-
         url = path.lstrip("/")
 
         if method == "GET" and self._cache:
