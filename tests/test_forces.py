@@ -3,7 +3,7 @@
 import respx
 from httpx import Response
 
-from uk_police_api import AsyncPoliceAPI, PoliceAPI
+from uk_police_api import PoliceAPI
 from uk_police_api.models import Force, ForceLink, ForceOfficer
 
 BASE = "https://data.police.uk/api"
@@ -64,34 +64,3 @@ class TestForcesPeople:
         assert isinstance(officers[0], ForceOfficer)
         assert officers[0].name == "Jane Smith"
         assert officers[0].rank == "Commissioner"
-
-
-class TestAsyncForces:
-    async def test_list(self):
-        with respx.mock(base_url=BASE, assert_all_called=False) as router:
-            router.get("/forces").mock(return_value=Response(200, json=[FORCE_LINK_FIXTURE]))
-            async with AsyncPoliceAPI(cache_ttl=None) as api:
-                forces = await api.forces.list()
-        assert len(forces) == 1
-        assert isinstance(forces[0], ForceLink)
-        assert forces[0].id == "metropolitan"
-
-    async def test_get(self):
-        with respx.mock(base_url=BASE, assert_all_called=False) as router:
-            router.get("/forces/metropolitan").mock(return_value=Response(200, json=FORCE_FIXTURE))
-            async with AsyncPoliceAPI(cache_ttl=None) as api:
-                force = await api.forces.get("metropolitan")
-        assert isinstance(force, Force)
-        assert force.id == "metropolitan"
-        assert force.telephone == "101"
-
-    async def test_people(self):
-        with respx.mock(base_url=BASE, assert_all_called=False) as router:
-            router.get("/forces/metropolitan/people").mock(
-                return_value=Response(200, json=[OFFICER_FIXTURE])
-            )
-            async with AsyncPoliceAPI(cache_ttl=None) as api:
-                officers = await api.forces.people("metropolitan")
-        assert len(officers) == 1
-        assert isinstance(officers[0], ForceOfficer)
-        assert officers[0].name == "Jane Smith"
