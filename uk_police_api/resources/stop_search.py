@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ..models.stop_search import StopSearch
-from ..utils import Polygon, validate_date
-from .crimes import _async_poly_request, _async_resolve_poly, _poly_request, _resolve_poly
+from ..utils import Polygon, encode_polygon, polygon_use_post, validate_date
+from .crimes import _async_resolve_poly, _resolve_poly
 
 if TYPE_CHECKING:
     from .._client import AsyncPoliceAPI, PoliceAPI
@@ -17,6 +17,13 @@ class StopSearchResource:
 
     def __init__(self, client: PoliceAPI) -> None:
         self._client = client
+
+    def _do_poly_request(self, path: str, poly: Polygon, params: dict[str, str]) -> list[Any]:
+        encoded = encode_polygon(poly)
+        params["poly"] = encoded
+        if polygon_use_post(poly, params):
+            return self._client._post(path, data=params)
+        return self._client._get(path, params=params)
 
     def street(
         self,
@@ -46,7 +53,7 @@ class StopSearchResource:
             params["date"] = validate_date(date)
 
         if poly is not None:
-            raw: list[Any] = _poly_request(self._client, "stops-street", poly, params)
+            raw: list[Any] = self._do_poly_request("stops-street", poly, params)
         else:
             if lat is not None:
                 params["lat"] = str(lat)
@@ -114,6 +121,15 @@ class AsyncStopSearchResource(StopSearchResource):
     def __init__(self, client: AsyncPoliceAPI) -> None:  # type: ignore[override]
         self._client = client  # type: ignore[assignment]
 
+    async def _async_do_poly_request(
+        self, path: str, poly: Polygon, params: dict[str, str]
+    ) -> list[Any]:
+        encoded = encode_polygon(poly)
+        params["poly"] = encoded
+        if polygon_use_post(poly, params):
+            return await self._client._post(path, data=params)  # type: ignore[union-attr]
+        return await self._client._get(path, params=params)  # type: ignore[union-attr]
+
     async def street(  # type: ignore[override]
         self,
         *,
@@ -130,7 +146,7 @@ class AsyncStopSearchResource(StopSearchResource):
             params["date"] = validate_date(date)
 
         if poly is not None:
-            raw = await _async_poly_request(self._client, "stops-street", poly, params)  # type: ignore[arg-type]
+            raw = await self._async_do_poly_request("stops-street", poly, params)
         else:
             if lat is not None:
                 params["lat"] = str(lat)
