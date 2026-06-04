@@ -59,6 +59,24 @@ async def _async_resolve_poly(
     return poly
 
 
+def _poly_request(client: PoliceAPI, path: str, poly: Polygon, params: dict[str, str]) -> list[Any]:
+    encoded = encode_polygon(poly)
+    params["poly"] = encoded
+    if polygon_use_post(poly, params):
+        return client._post(path, data=params)
+    return client._get(path, params=params)
+
+
+async def _async_poly_request(
+    client: AsyncPoliceAPI, path: str, poly: Polygon, params: dict[str, str]
+) -> list[Any]:
+    encoded = encode_polygon(poly)
+    params["poly"] = encoded
+    if polygon_use_post(poly, params):
+        return await client._post(path, data=params)
+    return await client._get(path, params=params)
+
+
 class CrimesResource:
     """Synchronous crime data resource."""
 
@@ -85,13 +103,6 @@ class CrimesResource:
         if extra:
             params.update(extra)
         return params
-
-    def _do_poly_request(self, path: str, poly: Polygon, params: dict[str, str]) -> list[Any]:
-        encoded = encode_polygon(poly)
-        params["poly"] = encoded
-        if polygon_use_post(poly, params):
-            return self._client._post(path, data=params)
-        return self._client._get(path, params=params)
 
     def street(
         self,
@@ -126,7 +137,7 @@ class CrimesResource:
             params["date"] = validate_date(date)
 
         if poly is not None:
-            raw: list[Any] = self._do_poly_request(path, poly, params)
+            raw: list[Any] = _poly_request(self._client, path, poly, params)
         else:
             if lat is not None:
                 params["lat"] = str(lat)
@@ -209,7 +220,7 @@ class CrimesResource:
             params["date"] = validate_date(date)
 
         if poly is not None:
-            return self._do_poly_request(path, poly, params)
+            return _poly_request(self._client, path, poly, params)
 
         if lat is not None:
             params["lat"] = str(lat)
@@ -290,15 +301,6 @@ class AsyncCrimesResource(CrimesResource):
     def __init__(self, client: AsyncPoliceAPI) -> None:  # type: ignore[override]
         self._client = client  # type: ignore[assignment]
 
-    async def _async_do_poly_request(
-        self, path: str, poly: Polygon, params: dict[str, str]
-    ) -> list[Any]:
-        encoded = encode_polygon(poly)
-        params["poly"] = encoded
-        if polygon_use_post(poly, params):
-            return await self._client._post(path, data=params)  # type: ignore[union-attr]
-        return await self._client._get(path, params=params)  # type: ignore[union-attr]
-
     async def street(  # type: ignore[override]
         self,
         category: str = "all-crime",
@@ -318,7 +320,7 @@ class AsyncCrimesResource(CrimesResource):
             params["date"] = validate_date(date)
 
         if poly is not None:
-            raw = await self._async_do_poly_request(path, poly, params)
+            raw = await _async_poly_request(self._client, path, poly, params)  # type: ignore[arg-type]
         else:
             if lat is not None:
                 params["lat"] = str(lat)
@@ -380,7 +382,7 @@ class AsyncCrimesResource(CrimesResource):
             params["date"] = validate_date(date)
 
         if poly is not None:
-            return await self._async_do_poly_request(path, poly, params)
+            return await _async_poly_request(self._client, path, poly, params)  # type: ignore[arg-type]
 
         if lat is not None:
             params["lat"] = str(lat)
