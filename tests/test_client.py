@@ -1,17 +1,21 @@
 """Tests for core client behaviour: caching, retry, errors, disk cache."""
 
 import time
+from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 import respx
 from httpx import Response
 
 from uk_police_api import AsyncPoliceAPI, PoliceAPI
 from uk_police_api.exceptions import (
+    PoliceAPIError,
     PoliceAPINotFoundError,
     PoliceAPIRateLimitError,
     PoliceAPIResponseError,
     PoliceAPIServerError,
+    PoliceAPITimeoutError,
 )
 
 BASE = "https://data.police.uk/api"
@@ -114,6 +118,34 @@ class TestDiskCache:
                 api.clear_cache()
                 assert not any(cache_dir.glob("*.json"))
 
+    def test_disk_cache_expired_refetches(self, tmp_path):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/crime-last-updated").mock(
+                return_value=Response(200, json={"date": "2024-10"})
+            )
+            cache_dir = tmp_path / "cache"
+            with PoliceAPI(cache_ttl=1, cache_dir=cache_dir) as api:
+                api.crimes.last_updated()
+            time.sleep(1.1)
+            with PoliceAPI(cache_ttl=60, cache_dir=cache_dir) as api:
+                api.crimes.last_updated()
+        assert route.call_count == 2
+
+    def test_disk_cache_corrupt_file_handled(self, tmp_path):
+        cache_dir = tmp_path / "cache"
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/crime-last-updated").mock(
+                return_value=Response(200, json={"date": "2024-10"})
+            )
+            with PoliceAPI(cache_ttl=60, cache_dir=cache_dir) as api:
+                api.crimes.last_updated()
+            for f in cache_dir.glob("*.json"):
+                f.write_text("{bad json")
+            with PoliceAPI(cache_ttl=60, cache_dir=cache_dir) as api:
+                result = api.crimes.last_updated()
+        assert result.date == "2024-10"
+        assert route.call_count == 2
+
 
 class TestErrorHandling:
     def test_404_raises_not_found(self):
@@ -171,6 +203,29 @@ class TestErrorHandling:
                     api.forces.get("bad")
             assert exc_info.value.status_code == 404
 
+    def test_unknown_http_status_raises_police_api_error(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            router.get("/crime-last-updated").mock(return_value=Response(401))
+            with PoliceAPI(max_retries=0) as api:
+                with pytest.raises(PoliceAPIError) as exc_info:
+                    api.crimes.last_updated()
+        assert type(exc_info.value) is PoliceAPIError
+        assert exc_info.value.status_code == 401
+
+    def test_timeout_raises_timeout_error(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            router.get("/crime-last-updated").mock(side_effect=httpx.TimeoutException("timeout"))
+            with PoliceAPI(max_retries=0) as api:
+                with pytest.raises(PoliceAPITimeoutError):
+                    api.crimes.last_updated()
+
+    def test_http_error_raises_police_api_error(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            router.get("/crime-last-updated").mock(side_effect=httpx.HTTPError("connection failed"))
+            with PoliceAPI(max_retries=0) as api:
+                with pytest.raises(PoliceAPIError):
+                    api.crimes.last_updated()
+
 
 class TestContextManager:
     def test_sync_context_manager(self):
@@ -206,3 +261,69 @@ class TestResourceLazyInit:
             assert api.forces is not None
             assert api.neighbourhoods is not None
             assert api.availability is not None
+
+
+class TestAsyncClient:
+    async def test_cache_hit(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/crime-last-updated").mock(
+                return_value=Response(200, json={"date": "2024-10"})
+            )
+            async with AsyncPoliceAPI(cache_ttl=60) as api:
+                await api.crimes.last_updated()
+                await api.crimes.last_updated()
+        assert route.call_count == 1
+
+    async def test_timeout_raises(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            router.get("/crime-last-updated").mock(side_effect=httpx.TimeoutException("timeout"))
+            async with AsyncPoliceAPI(max_retries=0) as api:
+                with pytest.raises(PoliceAPITimeoutError):
+                    await api.crimes.last_updated()
+
+    async def test_http_error_raises(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            router.get("/crime-last-updated").mock(side_effect=httpx.HTTPError("connection failed"))
+            async with AsyncPoliceAPI(max_retries=0) as api:
+                with pytest.raises(PoliceAPIError):
+                    await api.crimes.last_updated()
+
+    async def test_invalid_json_raises(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            router.get("/crime-last-updated").mock(
+                return_value=Response(200, content=b"not json{{{")
+            )
+            async with AsyncPoliceAPI(max_retries=0) as api:
+                with pytest.raises(PoliceAPIResponseError):
+                    await api.crimes.last_updated()
+
+    async def test_server_error_retried(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/crime-last-updated").mock(return_value=Response(500))
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                async with AsyncPoliceAPI(max_retries=1) as api:
+                    with pytest.raises(PoliceAPIServerError):
+                        await api.crimes.last_updated()
+        assert route.call_count == 2
+
+    async def test_retry_uses_retry_after_header(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            router.get("/crime-last-updated").mock(
+                return_value=Response(429, headers={"Retry-After": "1"})
+            )
+            with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+                async with AsyncPoliceAPI(max_retries=1) as api:
+                    with pytest.raises(PoliceAPIRateLimitError):
+                        await api.crimes.last_updated()
+        mock_sleep.assert_called_once_with(1.0)
+
+    async def test_clear_cache(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/crime-last-updated").mock(
+                return_value=Response(200, json={"date": "2024-10"})
+            )
+            async with AsyncPoliceAPI(cache_ttl=60) as api:
+                await api.crimes.last_updated()
+                api.clear_cache()
+                await api.crimes.last_updated()
+        assert route.call_count == 2
