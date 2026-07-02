@@ -54,6 +54,23 @@ class TestStopSearchStreet:
                 stops = api.stop_search.street(poly=poly)
         assert len(stops) == 1
 
+    def test_by_polygon_post(self):
+        from uk_police_api.utils import circle_polygon
+
+        poly = circle_polygon(51.5, -0.1, radius_km=50, num_points=200)
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.post("/stops-street").mock(return_value=Response(200, json=[]))
+            with PoliceAPI(cache_ttl=None) as api:
+                api.stop_search.street(poly=poly)
+        assert route.called
+
+    def test_with_date(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/stops-street").mock(return_value=Response(200, json=[]))
+            with PoliceAPI(cache_ttl=None) as api:
+                api.stop_search.street(lat=51.5074, lng=-0.1278, date="2024-10")
+        assert route.calls[0].request.url.params["date"] == "2024-10"
+
 
 class TestStopSearchAtLocation:
     def test_at_location(self):
@@ -133,3 +150,27 @@ class TestAsyncStopSearch:
             async with AsyncPoliceAPI(cache_ttl=None) as api:
                 stops = await api.stop_search.street(poly=poly)
         assert len(stops) == 1
+
+    async def test_street_by_polygon_post(self):
+        from uk_police_api.utils import circle_polygon
+
+        poly = circle_polygon(51.5, -0.1, radius_km=50, num_points=200)
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.post("/stops-street").mock(return_value=Response(200, json=[]))
+            async with AsyncPoliceAPI(cache_ttl=None) as api:
+                await api.stop_search.street(poly=poly)
+        assert route.called
+
+    async def test_street_with_date(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/stops-street").mock(return_value=Response(200, json=[]))
+            async with AsyncPoliceAPI(cache_ttl=None) as api:
+                await api.stop_search.street(lat=51.5074, lng=-0.1278, date="2024-10")
+        assert route.calls[0].request.url.params["date"] == "2024-10"
+
+    async def test_at_location_with_date(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/stops-at-location").mock(return_value=Response(200, json=[]))
+            async with AsyncPoliceAPI(cache_ttl=None) as api:
+                await api.stop_search.at_location(location_id=12345, date="2024-10")
+        assert route.calls[0].request.url.params["date"] == "2024-10"

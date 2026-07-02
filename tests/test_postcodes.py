@@ -230,3 +230,26 @@ class TestAsyncPostcodesIO:
             async with AsyncPostcodesIO() as geo:
                 with pytest.raises(PoliceAPITimeoutError):
                     await geo.bulk_lookup(["SE1 1BP"])
+
+    async def test_async_lookup_http_error(self):
+        with respx.mock(base_url=POSTCODES_BASE, assert_all_called=False) as router:
+            router.get("/postcodes/SE11BP").mock(
+                side_effect=httpx.ConnectError("connection refused")
+            )
+            async with AsyncPostcodesIO() as geo:
+                with pytest.raises(PoliceAPIError):
+                    await geo.lookup("SE1 1BP")
+
+    async def test_async_bulk_lookup_http_error(self):
+        with respx.mock(base_url=POSTCODES_BASE, assert_all_called=False) as router:
+            router.post("/postcodes").mock(side_effect=httpx.ConnectError("connection refused"))
+            async with AsyncPostcodesIO() as geo:
+                with pytest.raises(PoliceAPIError):
+                    await geo.bulk_lookup(["SE1 1BP"])
+
+    async def test_async_bulk_lookup_invalid_json(self):
+        with respx.mock(base_url=POSTCODES_BASE, assert_all_called=False) as router:
+            router.post("/postcodes").mock(return_value=Response(200, content=b"not json"))
+            async with AsyncPostcodesIO() as geo:
+                with pytest.raises(PoliceAPIResponseError):
+                    await geo.bulk_lookup(["SE1 1BP"])

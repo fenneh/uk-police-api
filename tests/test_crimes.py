@@ -155,6 +155,15 @@ class TestCrimesAtLocation:
                 api.crimes.at_location(location_id=884227)
         assert route.calls[0].request.url.params["location_id"] == "884227"
 
+    def test_at_location_with_date(self, crime_data):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/crimes-at-location").mock(
+                return_value=Response(200, json=[crime_data])
+            )
+            with PoliceAPI(cache_ttl=None) as api:
+                api.crimes.at_location(lat=51.5074, lng=-0.1278, date="2024-10")
+        assert route.calls[0].request.url.params["date"] == "2024-10"
+
 
 class TestCrimesNoLocation:
     def test_no_location(self, crime_data):
@@ -167,6 +176,15 @@ class TestCrimesNoLocation:
         assert len(crimes) == 1
         assert route.calls[0].request.url.params["force"] == "metropolitan"
         assert route.calls[0].request.url.params["category"] == "possession-of-weapons"
+
+    def test_no_location_with_date(self, crime_data):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/crimes-no-location").mock(
+                return_value=Response(200, json=[crime_data])
+            )
+            with PoliceAPI(cache_ttl=None) as api:
+                api.crimes.no_location("all-crime", "metropolitan", date="2024-10")
+        assert route.calls[0].request.url.params["date"] == "2024-10"
 
 
 class TestCrimesCategories:
@@ -378,6 +396,16 @@ class TestAsyncCrimes:
                     postcode="SW1A 1AA",
                 )
 
+    async def test_async_street_by_location_id(self, crime_data):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/crimes-street/all-crime").mock(
+                return_value=Response(200, json=[crime_data])
+            )
+            async with AsyncPoliceAPI(cache_ttl=None) as api:
+                crimes = await api.crimes.street(location_id=884227)
+        assert route.calls[0].request.url.params["location_id"] == "884227"
+        assert len(crimes) == 1
+
     async def test_async_at_location(self, crime_data):
         with respx.mock(base_url=BASE, assert_all_called=False) as router:
             route = router.get("/crimes-at-location").mock(
@@ -398,6 +426,15 @@ class TestAsyncCrimes:
         assert len(crimes) == 1
         assert route.calls[0].request.url.params["force"] == "metropolitan"
 
+    async def test_async_no_location_with_date(self, crime_data):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/crimes-no-location").mock(
+                return_value=Response(200, json=[crime_data])
+            )
+            async with AsyncPoliceAPI(cache_ttl=None) as api:
+                await api.crimes.no_location("all-crime", "metropolitan", date="2024-10")
+        assert route.calls[0].request.url.params["date"] == "2024-10"
+
     async def test_async_categories(self):
         with respx.mock(base_url=BASE, assert_all_called=False) as router:
             router.get("/crime-categories").mock(
@@ -406,6 +443,16 @@ class TestAsyncCrimes:
             async with AsyncPoliceAPI(cache_ttl=None) as api:
                 cats = await api.crimes.categories()
         assert len(cats) == 1
+
+    async def test_async_categories_with_date(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/crime-categories").mock(
+                return_value=Response(200, json=[{"url": "all-crime", "name": "All crime"}])
+            )
+            async with AsyncPoliceAPI(cache_ttl=None) as api:
+                cats = await api.crimes.categories(date="2024-10")
+        assert len(cats) == 1
+        assert route.calls[0].request.url.params["date"] == "2024-10"
 
     async def test_async_last_updated(self):
         with respx.mock(base_url=BASE, assert_all_called=False) as router:
@@ -435,6 +482,24 @@ class TestAsyncCrimes:
                 await api.crimes.outcomes_at_location(poly=poly)
         assert "poly" in route.calls[0].request.url.params
 
+    async def test_async_outcomes_at_location_with_date(self, crime_data):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/outcomes-at-location").mock(
+                return_value=Response(200, json=[crime_data])
+            )
+            async with AsyncPoliceAPI(cache_ttl=None) as api:
+                await api.crimes.outcomes_at_location(lat=51.5, lng=-0.1, date="2024-10")
+        assert route.calls[0].request.url.params["date"] == "2024-10"
+
+    async def test_async_outcomes_at_location_by_id(self, crime_data):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            route = router.get("/outcomes-at-location").mock(
+                return_value=Response(200, json=[crime_data])
+            )
+            async with AsyncPoliceAPI(cache_ttl=None) as api:
+                await api.crimes.outcomes_at_location(location_id=884227)
+        assert route.calls[0].request.url.params["location_id"] == "884227"
+
     async def test_async_outcomes_for_crime(self, crime_data):
         raw = {
             "crime": crime_data,
@@ -461,6 +526,13 @@ class TestAsyncCrimes:
             async with AsyncPoliceAPI(cache_ttl=None) as api:
                 crimes = await api.crimes.street_months(months=2, lat=51.5, lng=-0.1)
         assert len(crimes) == 1  # deduplicated across 2 months
+
+    async def test_async_street_months_handles_fetch_error(self):
+        with respx.mock(base_url=BASE, assert_all_called=False) as router:
+            router.get("/crimes-street/all-crime").mock(return_value=Response(503))
+            async with AsyncPoliceAPI(cache_ttl=None) as api:
+                crimes = await api.crimes.street_months(months=1, lat=51.5, lng=-0.1)
+        assert crimes == []
 
 
 class TestIntegration:
