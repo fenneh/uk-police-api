@@ -71,7 +71,6 @@ class CrimesResource:
         lng: float | None,
         location_id: int | None,
         date: str | None,
-        extra: dict[str, str] | None = None,
     ) -> dict[str, str]:
         params: dict[str, str] = {}
         if lat is not None:
@@ -82,8 +81,6 @@ class CrimesResource:
             params["location_id"] = str(location_id)
         if date is not None:
             params["date"] = validate_date(date)
-        if extra:
-            params.update(extra)
         return params
 
     def _do_poly_request(self, path: str, poly: Polygon, params: dict[str, str]) -> list[Any]:
