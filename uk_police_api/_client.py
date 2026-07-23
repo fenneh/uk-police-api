@@ -9,6 +9,7 @@ import logging
 import random
 import time
 from functools import cached_property
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://data.police.uk/api/"
 _RETRYABLE = {429, 500, 502, 503, 504}
+_USER_AGENT = f"uk-police-api/{_pkg_version('uk-police-api')}"
 
 
 class Cache:
@@ -119,7 +121,7 @@ class PoliceAPI:
         self._http = httpx.Client(
             base_url=BASE_URL,
             timeout=timeout,
-            headers={"User-Agent": "uk-police-api/0.1.0", "Accept": "application/json"},
+            headers={"User-Agent": _USER_AGENT, "Accept": "application/json"},
         )
 
     @cached_property
@@ -241,7 +243,7 @@ class AsyncPoliceAPI:
         self._http = httpx.AsyncClient(
             base_url=BASE_URL,
             timeout=timeout,
-            headers={"User-Agent": "uk-police-api/0.1.0", "Accept": "application/json"},
+            headers={"User-Agent": _USER_AGENT, "Accept": "application/json"},
         )
 
     @cached_property
