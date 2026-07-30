@@ -25,6 +25,38 @@ logger = logging.getLogger(__name__)
 _BASE_URL = "https://api.postcodes.io/"
 
 
+def _parse_lookup_response(response: httpx.Response, postcode: str) -> "GeocodedPostcode":
+    if response.status_code == 404:
+        raise PoliceAPINotFoundError(f"Postcode not found: {postcode!r}")
+    if response.status_code != 200:
+        raise PoliceAPIError(f"postcodes.io returned HTTP {response.status_code}")
+
+    try:
+        body = response.json()
+    except Exception as e:
+        raise PoliceAPIResponseError("postcodes.io returned invalid JSON") from e
+
+    return GeocodedPostcode(body["result"])
+
+
+def _parse_bulk_response(response: httpx.Response) -> list["GeocodedPostcode | None"]:
+    if response.status_code != 200:
+        raise PoliceAPIError(f"postcodes.io returned HTTP {response.status_code}")
+
+    try:
+        body = response.json()
+    except Exception as e:
+        raise PoliceAPIResponseError("postcodes.io returned invalid JSON") from e
+
+    results: list[GeocodedPostcode | None] = []
+    for item in body["result"]:
+        if item["result"] is None:
+            results.append(None)
+        else:
+            results.append(GeocodedPostcode(item["result"]))
+    return results
+
+
 class GeocodedPostcode:
     """Result of a postcode lookup."""
 
@@ -83,17 +115,7 @@ class PostcodesIO:
         except httpx.HTTPError as e:
             raise PoliceAPIError(f"postcodes.io HTTP error for {postcode!r}") from e
 
-        if response.status_code == 404:
-            raise PoliceAPINotFoundError(f"Postcode not found: {postcode!r}")
-        if response.status_code != 200:
-            raise PoliceAPIError(f"postcodes.io returned HTTP {response.status_code}")
-
-        try:
-            body = response.json()
-        except Exception as e:
-            raise PoliceAPIResponseError("postcodes.io returned invalid JSON") from e
-
-        return GeocodedPostcode(body["result"])
+        return _parse_lookup_response(response, postcode)
 
     def bulk_lookup(self, postcodes: list[str]) -> list[GeocodedPostcode | None]:
         """Geocode up to 100 postcodes in a single request.
@@ -116,21 +138,7 @@ class PostcodesIO:
         except httpx.HTTPError as e:
             raise PoliceAPIError("postcodes.io bulk lookup HTTP error") from e
 
-        if response.status_code != 200:
-            raise PoliceAPIError(f"postcodes.io returned HTTP {response.status_code}")
-
-        try:
-            body = response.json()
-        except Exception as e:
-            raise PoliceAPIResponseError("postcodes.io returned invalid JSON") from e
-
-        results: list[GeocodedPostcode | None] = []
-        for item in body["result"]:
-            if item["result"] is None:
-                results.append(None)
-            else:
-                results.append(GeocodedPostcode(item["result"]))
-        return results
+        return _parse_bulk_response(response)
 
     def close(self) -> None:
         self._http.close()
@@ -172,17 +180,7 @@ class AsyncPostcodesIO:
         except httpx.HTTPError as e:
             raise PoliceAPIError(f"postcodes.io HTTP error for {postcode!r}") from e
 
-        if response.status_code == 404:
-            raise PoliceAPINotFoundError(f"Postcode not found: {postcode!r}")
-        if response.status_code != 200:
-            raise PoliceAPIError(f"postcodes.io returned HTTP {response.status_code}")
-
-        try:
-            body = response.json()
-        except Exception as e:
-            raise PoliceAPIResponseError("postcodes.io returned invalid JSON") from e
-
-        return GeocodedPostcode(body["result"])
+        return _parse_lookup_response(response, postcode)
 
     async def bulk_lookup(self, postcodes: list[str]) -> list[GeocodedPostcode | None]:
         """Geocode up to 100 postcodes in a single request."""
@@ -198,21 +196,7 @@ class AsyncPostcodesIO:
         except httpx.HTTPError as e:
             raise PoliceAPIError("postcodes.io bulk lookup HTTP error") from e
 
-        if response.status_code != 200:
-            raise PoliceAPIError(f"postcodes.io returned HTTP {response.status_code}")
-
-        try:
-            body = response.json()
-        except Exception as e:
-            raise PoliceAPIResponseError("postcodes.io returned invalid JSON") from e
-
-        results: list[GeocodedPostcode | None] = []
-        for item in body["result"]:
-            if item["result"] is None:
-                results.append(None)
-            else:
-                results.append(GeocodedPostcode(item["result"]))
-        return results
+        return _parse_bulk_response(response)
 
     async def aclose(self) -> None:
         await self._http.aclose()
