@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any
 
+from ..exceptions import PoliceAPIError
 from ..models.crime import (
     Crime,
     CrimeCategory,
@@ -283,7 +284,7 @@ class CrimesResource:
                     poly=poly,
                     date=month,
                 )
-            except Exception:
+            except PoliceAPIError:
                 continue
             for c in crimes:
                 if c.persistent_id not in seen:
@@ -420,7 +421,7 @@ class AsyncCrimesResource(CrimesResource):
                     poly=poly,
                     date=month,
                 )
-            except Exception:
+            except PoliceAPIError:
                 return []
 
         batches = await asyncio.gather(*[_fetch(m) for m in recent_months(months)])
