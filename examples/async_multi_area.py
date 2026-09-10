@@ -8,7 +8,6 @@ import asyncio
 
 from uk_police_api import AsyncPoliceAPI
 
-
 POSTCODES = [
     ("SE1 7PB", "Borough Market"),
     ("EC1A 1BB", "Barbican"),
